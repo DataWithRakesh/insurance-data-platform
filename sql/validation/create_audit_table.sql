@@ -1,0 +1,12 @@
+audit_id
+pipeline_name
+file_name
+file_path
+file_size
+record_count
+status
+error_message
+pipeline_run_id
+load_start_time
+load_end_time
+created_date
