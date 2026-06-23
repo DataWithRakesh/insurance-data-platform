@@ -10,7 +10,7 @@
 		"typeProperties": {
 			"location": {
 				"type": "AzureBlobFSLocation",
-				"folderPath": "landing",
+				"folderPath": "landing/insurance_claims",
 				"fileSystem": "insurancedataplatform"
 			},
 			"columnDelimiter": ",",
