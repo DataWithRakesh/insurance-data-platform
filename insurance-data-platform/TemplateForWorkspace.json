@@ -30,6 +30,163 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('workspaceName'), '/pl_file_audit_check')]",
+			"type": "Microsoft.Synapse/workspaces/pipelines",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"activities": [
+					{
+						"name": "gm_landing_files",
+						"type": "GetMetadata",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "ds_landing_insurance_folder",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"fieldList": [
+								"childItems"
+							],
+							"storeSettings": {
+								"type": "AzureBlobFSReadSettings",
+								"recursive": true,
+								"enablePartitionDiscovery": false
+							},
+							"formatSettings": {
+								"type": "BinaryReadSettings"
+							}
+						}
+					},
+					{
+						"name": "fe_process_files",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "gm_landing_files",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('gm_landing_files').output.childItems",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "sv_file_name",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "v_file_name",
+										"value": {
+											"value": "@item().name",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "sv_file_path",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "sv_file_name",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "v_file_path",
+										"value": {
+											"value": "@concat('landing/insurance_claims/',item().name)",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "lk_processed_files",
+									"type": "Lookup",
+									"dependsOn": [
+										{
+											"activity": "sv_file_path",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "DelimitedTextSource",
+											"storeSettings": {
+												"type": "AzureBlobFSReadSettings",
+												"recursive": true,
+												"enablePartitionDiscovery": false
+											},
+											"formatSettings": {
+												"type": "DelimitedTextReadSettings"
+											}
+										},
+										"dataset": {
+											"referenceName": "ds_processed_files",
+											"type": "DatasetReference",
+											"parameters": {}
+										},
+										"firstRowOnly": false
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"variables": {
+					"v_file_name": {
+						"type": "String"
+					},
+					"v_file_path": {
+						"type": "String"
+					}
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/datasets/ds_landing_insurance_folder')]",
+				"[concat(variables('workspaceId'), '/datasets/ds_processed_files')]"
+			]
+		},
+		{
 			"name": "[concat(parameters('workspaceName'), '/pl_insurance_bronze_ingestion')]",
 			"type": "Microsoft.Synapse/workspaces/pipelines",
 			"apiVersion": "2019-06-01-preview",
@@ -99,6 +256,20 @@
 				"policy": {
 					"elapsedTimeMetric": {}
 				},
+				"parameters": {
+					"p_year": {
+						"type": "string",
+						"defaultValue": "2026"
+					},
+					"p_month": {
+						"type": "string",
+						"defaultValue": "06"
+					},
+					"p_day": {
+						"type": "string",
+						"defaultValue": "23"
+					}
+				},
 				"annotations": []
 			},
 			"dependsOn": [
@@ -155,6 +326,63 @@
 					"quoteChar": "\""
 				},
 				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/ls_adls_dev')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ds_landing_insurance_folder')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_adls_dev",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Binary",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": "landing/insurance_claims",
+						"fileSystem": "insurancedataplatform"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/linkedServices/ls_adls_dev')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/ds_processed_files')]",
+			"type": "Microsoft.Synapse/workspaces/datasets",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_adls_dev",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "DelimitedText",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "processed_files.csv",
+						"folderPath": "control",
+						"fileSystem": "metadata"
+					},
+					"columnDelimiter": ",",
+					"escapeChar": "\\",
+					"firstRowAsHeader": true,
+					"quoteChar": "\""
+				},
+				"schema": [
+					{
+						"name": "{\\rtf1\\ansi\\ansicpg1252\\cocoartf2867",
+						"type": "String"
+					}
+				]
 			},
 			"dependsOn": [
 				"[concat(variables('workspaceId'), '/linkedServices/ls_adls_dev')]"
