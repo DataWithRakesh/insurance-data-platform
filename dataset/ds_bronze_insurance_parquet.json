@@ -10,6 +10,7 @@
 		"typeProperties": {
 			"location": {
 				"type": "AzureBlobFSLocation",
+				"fileName": "insurance_claims.parquet",
 				"folderPath": "bronze",
 				"fileSystem": "insurancedataplatform"
 			},
