@@ -10,7 +10,6 @@
 		"typeProperties": {
 			"location": {
 				"type": "AzureBlobFSLocation",
-				"fileName": "insurance_claims",
 				"folderPath": "bronze",
 				"fileSystem": "insurancedataplatform"
 			},
