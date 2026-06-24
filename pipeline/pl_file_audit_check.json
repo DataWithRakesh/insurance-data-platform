@@ -215,6 +215,27 @@
 												"type": "DatasetReference"
 											}
 										]
+									},
+									{
+										"name": "sv_processed_date",
+										"type": "SetVariable",
+										"dependsOn": [
+											{
+												"activity": "cp_landing_to_bronze",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											}
+										],
+										"policy": {
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"variableName": "v_processed_date",
+											"value": "@utcNow()"
+										}
 									}
 								]
 							}
@@ -228,6 +249,9 @@
 				"type": "String"
 			},
 			"v_file_path": {
+				"type": "String"
+			},
+			"v_processed_date": {
 				"type": "String"
 			}
 		},
