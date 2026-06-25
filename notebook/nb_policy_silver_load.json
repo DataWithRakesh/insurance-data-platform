@@ -17,7 +17,7 @@
 				"spark.dynamicAllocation.enabled": "true",
 				"spark.dynamicAllocation.minExecutors": "1",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "ac274533-c3b7-4bc2-9e87-3d0daa87fd07"
+				"spark.autotune.trackingId": "e6ff1519-baca-4e8b-ac9c-922aef3c7a4f"
 			}
 		},
 		"metadata": {
@@ -54,7 +54,7 @@
 					"from pyspark.sql.functions import col,count,lit,current_date,row_number\n",
 					"from pyspark.sql.window import Window"
 				],
-				"execution_count": 11
+				"execution_count": 1
 			},
 			{
 				"cell_type": "code",
