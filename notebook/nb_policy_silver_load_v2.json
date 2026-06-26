@@ -17,7 +17,7 @@
 				"spark.dynamicAllocation.enabled": "true",
 				"spark.dynamicAllocation.minExecutors": "1",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "9093c938-3191-44e8-b71c-2b59c8fb25bb"
+				"spark.autotune.trackingId": "2490786d-8e17-4cf4-ae84-d9683317f00f"
 			}
 		},
 		"metadata": {
@@ -68,7 +68,7 @@
 					"from pyspark.sql.window import Window\n",
 					"from delta.tables import DeltaTable"
 				],
-				"execution_count": 3
+				"execution_count": 1
 			},
 			{
 				"cell_type": "markdown",
@@ -93,7 +93,7 @@
 					"silver_path=(f\"abfss://{container_name}@{storage_account}.dfs.core.windows.net/silver/policy/\")\n",
 					""
 				],
-				"execution_count": null
+				"execution_count": 2
 			},
 			{
 				"cell_type": "markdown",
@@ -115,7 +115,7 @@
 					"print(f\"Bronze record count is : {bronze_df.count()}\")\n",
 					"bronze_df.printSchema()"
 				],
-				"execution_count": null
+				"execution_count": 3
 			},
 			{
 				"cell_type": "markdown",
@@ -161,6 +161,33 @@
 					"print(f\"Policy record count : {policy_df.count()}\")\n",
 					"policy_df.show(5,truncate=False)"
 				],
+				"execution_count": 4
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"display(bronze_df.filter(F.col(\"policy_number\")==\"521585\"))\n",
+					"\n",
+					"display(policy_df.filter(F.col(\"policy_number\")==\"521585\"))\n",
+					"display(target_df.filter(F.col(\"policy_number\")==\"521585\"))"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"policy_df.select(\"policy_bind_date\").show(5, truncate=False)"
+				],
+				"execution_count": 5
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"target_df.select(\"policy_bind_date\").show(5, truncate=False)"
+				],
 				"execution_count": null
 			},
 			{
@@ -196,7 +223,7 @@
 					"print(f\"Invalid premium records are : {invalid_premium}\")\n",
 					"\n",
 					"if (null_count >0 or duplicate_count > 0 or invalid_premium >0):\n",
-					"    raise Exception(f \"\"\"\n",
+					"    raise Exception(f\"\"\"\n",
 					"                    Data Quality Validation Failed\n",
 					"                    \n",
 					"                    Null Policy Numbers : {null_count}\n",
@@ -206,7 +233,7 @@
 					"print(\"Data Quality Validation Passed\")\n",
 					""
 				],
-				"execution_count": null
+				"execution_count": 6
 			},
 			{
 				"cell_type": "markdown",
@@ -227,7 +254,7 @@
 					"is_delta_table = DeltaTable.isDeltaTable(spark,silver_path)\n",
 					"print(f\"Silver policy exist : {is_delta_table}\")"
 				],
-				"execution_count": null
+				"execution_count": 6
 			},
 			{
 				"cell_type": "markdown",
@@ -245,13 +272,13 @@
 			{
 				"cell_type": "code",
 				"source": [
-					"is not is_delta_table:\n",
+					"if not is_delta_table:\n",
 					"\n",
 					"    print(\"Initial Load Starting...\")\n",
 					"    \n",
 					"    initial_load_df=(\n",
 					"            policy_df.withColumn(\"policy_sk\",\n",
-					"            F.row_number().over(Window.orderBy(\"ploicy_number\")))\\\n",
+					"            F.row_number().over(Window.orderBy(\"policy_number\")))\\\n",
 					"            .withColumn(\"effective_start_date\",F.current_date())\\\n",
 					"            .withColumn(\"effective_end_date\",F.lit(\"9999-12-31\"))\\\n",
 					"            .withColumn(\"is_current\",F.lit(\"Y\")))\n",
@@ -260,7 +287,7 @@
 					"\n",
 					"    print(\"Intial load completed...\")"
 				],
-				"execution_count": null
+				"execution_count": 7
 			},
 			{
 				"cell_type": "markdown",
@@ -278,11 +305,22 @@
 			},
 			{
 				"cell_type": "code",
+				"metadata": {
+					"jupyter": {
+						"source_hidden": false,
+						"outputs_hidden": false
+					},
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
 				"source": [
 					"target_df = spark.read.format(\"delta\").load(silver_path)\n",
 					"\n",
 					"# Get the last number of the Surrogate key which is \"policy_sk\"\n",
-					"max_sk_df = target_df.agg(F.max(\"policy_sk\")).alias(\"max_sk\")\n",
+					"max_sk_df = target_df.agg(F.max(\"policy_sk\").alias(\"max_sk\"))\n",
 					"\n",
 					"max_sk= max_sk_df.collect()[0][\"max_sk\"]\n",
 					"\n",
@@ -314,7 +352,86 @@
 					")\n",
 					""
 				],
-				"execution_count": null
+				"execution_count": 8
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"bronze_df.printSchema()"
+				],
+				"execution_count": 22
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"display(comparision_df.filter(F.col(\"policy_number\") == \"429027\") \\\n",
+					".select(\n",
+					"    \"src.policy_bind_date\",\"tgt.policy_bind_date\",\n",
+					"    \"src.policy_state\",\"tgt.policy_state\",\n",
+					"    \"src.policy_csl\",\"tgt.policy_csl\",\n",
+					"    \"src.policy_deductable\",\"tgt.policy_deductable\",\n",
+					"    \"src.policy_annual_premium\",\"tgt.policy_annual_premium\",\n",
+					"    \"src.umbrella_limit\",\"tgt.umbrella_limit\"\n",
+					"))"
+				],
+				"execution_count": 21
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Preparing Updated Records"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"updated_df = (comparision_df.filter(F.col(\"merge_action\")==\"UPDATE\"))\n",
+					"\n",
+					"print(f\"Updated record counts are : {updated_df.count()}\")\n",
+					"\n",
+					"updated_df.select(\"policy_number\",\"merge_action\").show(truncate=False)"
+				],
+				"execution_count": 9
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Preparing insert record"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"insert_df = (\n",
+					"    comparision_df\n",
+					"    .filter(\n",
+					"        F.col(\"merge_action\").isin(\"INSERT\", \"UPDATE\")\n",
+					"    )\n",
+					")\n",
+					"\n",
+					"print(f\"Insert record counts are : {insert_df.count()}\")\n",
+					"\n",
+					"insert_df.select(\"policy_number\",\"merge_action\").show(truncate=False)\n",
+					""
+				],
+				"execution_count": 21
 			},
 			{
 				"cell_type": "markdown",
