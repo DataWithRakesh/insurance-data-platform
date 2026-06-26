@@ -1,5 +1,5 @@
 {
-	"name": "nb_policy_silver_load_v2",
+	"name": "nb_policy_silver_load",
 	"properties": {
 		"nbformat": 4,
 		"nbformat_minor": 2,
@@ -17,7 +17,7 @@
 				"spark.dynamicAllocation.enabled": "true",
 				"spark.dynamicAllocation.minExecutors": "1",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "2490786d-8e17-4cf4-ae84-d9683317f00f"
+				"spark.autotune.trackingId": "86c266c9-c181-4ee1-b093-075b87256aa7"
 			}
 		},
 		"metadata": {
@@ -68,7 +68,7 @@
 					"from pyspark.sql.window import Window\n",
 					"from delta.tables import DeltaTable"
 				],
-				"execution_count": 1
+				"execution_count": 16
 			},
 			{
 				"cell_type": "markdown",
@@ -93,7 +93,7 @@
 					"silver_path=(f\"abfss://{container_name}@{storage_account}.dfs.core.windows.net/silver/policy/\")\n",
 					""
 				],
-				"execution_count": 2
+				"execution_count": 17
 			},
 			{
 				"cell_type": "markdown",
@@ -115,7 +115,7 @@
 					"print(f\"Bronze record count is : {bronze_df.count()}\")\n",
 					"bronze_df.printSchema()"
 				],
-				"execution_count": 3
+				"execution_count": 18
 			},
 			{
 				"cell_type": "markdown",
@@ -161,7 +161,7 @@
 					"print(f\"Policy record count : {policy_df.count()}\")\n",
 					"policy_df.show(5,truncate=False)"
 				],
-				"execution_count": 4
+				"execution_count": 19
 			},
 			{
 				"cell_type": "code",
@@ -169,10 +169,10 @@
 					"collapsed": false
 				},
 				"source": [
-					"display(bronze_df.filter(F.col(\"policy_number\")==\"521585\"))\n",
+					"display(bronze_df.filter(F.col(\"policy_number\")==\"842643\"))\n",
 					"\n",
-					"display(policy_df.filter(F.col(\"policy_number\")==\"521585\"))\n",
-					"display(target_df.filter(F.col(\"policy_number\")==\"521585\"))"
+					"display(policy_df.filter(F.col(\"policy_number\")==\"842643\"))\n",
+					"display(target_df.filter(F.col(\"policy_number\")==\"842643\"))"
 				],
 				"execution_count": null
 			},
@@ -181,7 +181,7 @@
 				"source": [
 					"policy_df.select(\"policy_bind_date\").show(5, truncate=False)"
 				],
-				"execution_count": 5
+				"execution_count": 22
 			},
 			{
 				"cell_type": "code",
@@ -233,7 +233,7 @@
 					"print(\"Data Quality Validation Passed\")\n",
 					""
 				],
-				"execution_count": 6
+				"execution_count": 23
 			},
 			{
 				"cell_type": "markdown",
@@ -254,7 +254,7 @@
 					"is_delta_table = DeltaTable.isDeltaTable(spark,silver_path)\n",
 					"print(f\"Silver policy exist : {is_delta_table}\")"
 				],
-				"execution_count": 6
+				"execution_count": 24
 			},
 			{
 				"cell_type": "markdown",
@@ -287,7 +287,7 @@
 					"\n",
 					"    print(\"Intial load completed...\")"
 				],
-				"execution_count": 7
+				"execution_count": 25
 			},
 			{
 				"cell_type": "markdown",
@@ -352,14 +352,7 @@
 					")\n",
 					""
 				],
-				"execution_count": 8
-			},
-			{
-				"cell_type": "code",
-				"source": [
-					"bronze_df.printSchema()"
-				],
-				"execution_count": 22
+				"execution_count": 26
 			},
 			{
 				"cell_type": "code",
@@ -367,7 +360,17 @@
 					"collapsed": false
 				},
 				"source": [
-					"display(comparision_df.filter(F.col(\"policy_number\") == \"429027\") \\\n",
+					"display(comparision_df.groupBy(\"merge_action\").count())"
+				],
+				"execution_count": null
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"display(comparision_df.filter(F.col(\"policy_number\") == \"842643\") \\\n",
 					".select(\n",
 					"    \"src.policy_bind_date\",\"tgt.policy_bind_date\",\n",
 					"    \"src.policy_state\",\"tgt.policy_state\",\n",
@@ -377,7 +380,7 @@
 					"    \"src.umbrella_limit\",\"tgt.umbrella_limit\"\n",
 					"))"
 				],
-				"execution_count": 21
+				"execution_count": null
 			},
 			{
 				"cell_type": "markdown",
@@ -401,7 +404,83 @@
 					"\n",
 					"updated_df.select(\"policy_number\",\"merge_action\").show(truncate=False)"
 				],
-				"execution_count": 9
+				"execution_count": 29
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Getting list of Existing Old records which are expired."
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"update_old_policy_list= []\n",
+					"\n",
+					"for row in updated_df.select(\"policy_number\").collect():\n",
+					"    update_old_policy_list.append(row[\"policy_number\"])\n",
+					"print(update_old_policy_list)"
+				],
+				"execution_count": 32
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Preparing the Target Df to updae the affected expired records"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"expired_df = (\n",
+					"    target_df\n",
+					"    .withColumn(\n",
+					"        \"effective_end_date\",\n",
+					"        F.when(\n",
+					"            (F.col(\"policy_number\").isin(update_old_policy_list)) &\n",
+					"            (F.col(\"is_current\") == \"Y\"),\n",
+					"            F.current_date()\n",
+					"        ).otherwise(F.col(\"effective_end_date\"))\n",
+					"    )\n",
+					"    .withColumn(\n",
+					"        \"is_current\",\n",
+					"        F.when(\n",
+					"            (F.col(\"policy_number\").isin(update_old_policy_list)) &\n",
+					"            (F.col(\"is_current\") == \"Y\"),\n",
+					"            \"N\"\n",
+					"        ).otherwise(F.col(\"is_current\"))\n",
+					"    )\n",
+					")"
+				],
+				"execution_count": 37
+			},
+			{
+				"cell_type": "code",
+				"metadata": {
+					"collapsed": false
+				},
+				"source": [
+					"display(expired_df.filter(F.col(\"policy_number\").isin(update_old_policy_list))\n",
+					".select(\"policy_number\",\n",
+					"\"effective_start_date\",\n",
+					"\"effective_end_date\",\n",
+					"\"is_current\"))"
+				],
+				"execution_count": 39
 			},
 			{
 				"cell_type": "markdown",
@@ -426,12 +505,12 @@
 					"    )\n",
 					")\n",
 					"\n",
-					"print(f\"Insert record counts are : {insert_df.count()}\")\n",
+					"print(f\"New insert record counts are : {insert_df.count()}\")\n",
 					"\n",
 					"insert_df.select(\"policy_number\",\"merge_action\").show(truncate=False)\n",
 					""
 				],
-				"execution_count": 21
+				"execution_count": 42
 			},
 			{
 				"cell_type": "markdown",
@@ -443,18 +522,28 @@
 					}
 				},
 				"source": [
-					"## 9. Post Load Validation"
+					"## 9. Prepare New INSERT/UPDATE Records"
 				]
 			},
 			{
 				"cell_type": "code",
 				"source": [
-					"comparision_df.select(\n",
+					"new_records_df =(\n",
+					"    insert_df.withColumn(\"policy_sk\",F.row_number().over(Window.orderBy(\"policy_number\"))+max_sk)\n",
+					"    .withColumn(\"effective_start_date\",F.current_date())\n",
+					"    .withColumn(\"effective_end_date\",F.lit(\"9999-12-31\"))\n",
+					"    .withColumn(\"is_current\",F.lit(\"Y\"))\n",
+					"    )\n",
+					"new_records_df.select(\n",
+					"    \"policy_sk\",\n",
 					"    \"policy_number\",\n",
-					"    \"merge_action\"\n",
-					").show(20,truncate=False)"
+					"    \"merge_action\",\n",
+					"    \"effective_start_date\",\n",
+					"    \"effective_end_date\",\n",
+					"    \"is_current\"\n",
+					").show(5,truncate=False)"
 				],
-				"execution_count": null
+				"execution_count": 43
 			},
 			{
 				"cell_type": "markdown",
@@ -466,15 +555,93 @@
 					}
 				},
 				"source": [
-					"## 10. Audit & Logging"
+					"1. - #Now the problem here is new_records_df contains extra schema(We can check buy print new_records_df print schema and expired_df print schema. Since the expired df is created from silver existing data). We have to now prepare our new data in a way where the schema should match with silver schema."
 				]
 			},
 			{
 				"cell_type": "code",
 				"source": [
-					""
+					"new_records_df = (\n",
+					"    new_records_df.select(\n",
+					"        \"policy_sk\",\n",
+					"        \"policy_number\",\n",
+					"        F.col(\"src.policy_bind_date\").alias(\"policy_bind_date\"),\n",
+					"        F.col(\"src.policy_state\").alias(\"policy_state\"),\n",
+					"        F.col(\"src.policy_csl\").alias(\"policy_csl\"),\n",
+					"        F.col(\"src.policy_deductable\").alias(\"policy_deductable\"),\n",
+					"        F.col(\"src.policy_annual_premium\").alias(\"policy_annual_premium\"),\n",
+					"        F.col(\"src.umbrella_limit\").alias(\"umbrella_limit\"),\n",
+					"        F.col(\"src.change_hash\").alias(\"change_hash\"),\n",
+					"        \"effective_start_date\",\n",
+					"        \"effective_end_date\",\n",
+					"        \"is_current\"\n",
+					"    )\n",
+					")"
 				],
-				"execution_count": null
+				"execution_count": 48
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"final_silver_df = expired_df.unionByName(new_records_df)\n",
+					"\n",
+					"print(f\"Final Silver Record Count : {final_silver_df.count()}\")"
+				],
+				"execution_count": 49
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"##  "
+				]
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Validation Current Vs Historical "
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"final_silver_df.groupBy(\"is_current\").count().show()"
+				],
+				"execution_count": 53
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## Write change data to silver delta"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"final_silver_df.write.format(\"delta\").mode(\"overwrite\").save(silver_path)\n",
+					"print(\"SCD2 Load Completed Successfully\")"
+				],
+				"execution_count": 54
 			}
 		]
 	}
