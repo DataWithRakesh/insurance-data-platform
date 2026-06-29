@@ -1,5 +1,5 @@
 {
-	"name": "nb_claim_fact",
+	"name": "nb_claim_summary_gold_datamarts",
 	"properties": {
 		"nbformat": 4,
 		"nbformat_minor": 2,
@@ -12,12 +12,12 @@
 			"driverCores": 4,
 			"executorMemory": "28g",
 			"executorCores": 4,
-			"numExecutors": 1,
+			"numExecutors": 2,
 			"conf": {
-				"spark.dynamicAllocation.enabled": "true",
-				"spark.dynamicAllocation.minExecutors": "1",
+				"spark.dynamicAllocation.enabled": "false",
+				"spark.dynamicAllocation.minExecutors": "2",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "1dacca7a-7d86-4d26-bc1a-b951f28f8575"
+				"spark.autotune.trackingId": "a7ddfb0c-5a60-4ef1-8fdf-db9d7428de18"
 			}
 		},
 		"metadata": {
@@ -68,7 +68,7 @@
 					"from pyspark.sql.window import Window\n",
 					"from delta.tables import DeltaTable"
 				],
-				"execution_count": 28
+				"execution_count": 44
 			},
 			{
 				"cell_type": "markdown",
@@ -94,9 +94,9 @@
 					"customer_silver_path=(f\"abfss://insurancedataplatform@rakeshsynapseadlsgen2.dfs.core.windows.net/silver/customer/\")\n",
 					"vehicle_silver_path=(f\"abfss://insurancedataplatform@rakeshsynapseadlsgen2.dfs.core.windows.net/silver/vehicle/\")\n",
 					"claim_silver_path=(f\"abfss://insurancedataplatform@rakeshsynapseadlsgen2.dfs.core.windows.net/silver/claim/\")\n",
-					""
+					"gold_claim_summary_path=(f\"abfss://insurancedataplatform@rakeshsynapseadlsgen2.dfs.core.windows.net/gold/\")"
 				],
-				"execution_count": 41
+				"execution_count": 54
 			},
 			{
 				"cell_type": "markdown",
@@ -108,17 +108,21 @@
 					}
 				},
 				"source": [
-					"### 3. Read Bronze Claim Data"
+					"### 3.Read Silver Tables"
 				]
 			},
 			{
 				"cell_type": "code",
 				"source": [
-					"bronze_df=spark.read.format(\"parquet\").load(bronze_path)\n",
-					"print(f\"Bronze record count is : {bronze_df.count()}\")\n",
-					"bronze_df.printSchema()"
+					"policy_df = spark.read.format(\"delta\").load(policy_silver_path)\n",
+					"\n",
+					"customer_df = spark.read.format(\"delta\").load(customer_silver_path)\n",
+					"\n",
+					"vehicle_df = spark.read.format(\"delta\").load(vehicle_silver_path)\n",
+					"\n",
+					"claim_df = spark.read.format(\"delta\").load(claim_silver_path)"
 				],
-				"execution_count": 30
+				"execution_count": 47
 			},
 			{
 				"cell_type": "markdown",
@@ -130,40 +134,79 @@
 					}
 				},
 				"source": [
-					"#### 4.Prepare Claim Data "
+					"### 4.Keep Only Current Dimension Records"
 				]
 			},
 			{
 				"cell_type": "code",
 				"source": [
-					"claim_df = (\n",
-					"    bronze_df.select(\n",
-					"        \"policy_number\",\n",
-					"        \"incident_date\",\n",
-					"        \"incident_type\",\n",
-					"        \"collision_type\",\n",
-					"        \"incident_severity\",\n",
-					"        \"authorities_contacted\",\n",
-					"        \"incident_state\",\n",
-					"        \"incident_city\",\n",
-					"        \"incident_location\",\n",
-					"        \"incident_hour_of_the_day\",\n",
-					"        \"number_of_vehicles_involved\",\n",
-					"        \"property_damage\",\n",
-					"        \"bodily_injuries\",\n",
-					"        \"witnesses\",\n",
-					"        \"police_report_available\",\n",
-					"        \"total_claim_amount\",\n",
-					"        \"injury_claim\",\n",
-					"        \"property_claim\",\n",
-					"        \"vehicle_claim\",\n",
-					"        \"fraud_reported\"\n",
+					"policy_df = policy_df.filter(F.col(\"is_current\")==\"Y\")\n",
+					"\n",
+					"customer_df = customer_df.filter(F.col(\"is_current\")==\"Y\")\n",
+					"\n",
+					"vehicle_df = vehicle_df.filter(F.col(\"is_current\")==\"Y\")"
+				],
+				"execution_count": 48
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### 5.Join Fact with Dimensions"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"gold_claim_summary_df = (\n",
+					"    claim_df.alias(\"f\")\n",
+					"\n",
+					"    .join(\n",
+					"        policy_df.alias(\"p\"),\n",
+					"        on=\"policy_sk\",\n",
+					"        how=\"left\"\n",
 					"    )\n",
-					")\n",
 					"\n",
-					"print(f\"Claim Record Count : {claim_df.count()}\")\n",
+					"    .join(\n",
+					"        customer_df.alias(\"c\"),\n",
+					"        on=\"customer_sk\",\n",
+					"        how=\"left\"\n",
+					"    )\n",
 					"\n",
-					"claim_df.show(5, truncate=False)"
+					"    .join(\n",
+					"        vehicle_df.alias(\"v\"),\n",
+					"        on=\"vehicle_sk\",\n",
+					"        how=\"left\"\n",
+					"    )\n",
+					")"
+				],
+				"execution_count": 49
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### 6.Validate gold data mart claim summary"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"print(gold_claim_summary_df.count())\n",
+					"\n",
+					"gold_claim_summary_df.show(5, truncate=False)"
 				],
 				"execution_count": null
 			},
@@ -177,141 +220,45 @@
 					}
 				},
 				"source": [
-					"### 5.Data Quality Validation"
+					"### 7.Select Business Columns"
 				]
 			},
 			{
 				"cell_type": "code",
 				"source": [
-					"record_count= claim_df.count()\n",
-					"print(f\"Record count of claim is : {record_count}\")\n",
+					"gold_claim_summary_df = (\n",
+					"    gold_claim_summary_df.select(\n",
 					"\n",
-					"#Checking Business key has any null entries\n",
-					"null_count= claim_df.filter(F.col(\"policy_number\").isNull()).count()\n",
-					"print(f\"Null policy number count : {null_count}\")\n",
-					"\n",
-					"#Checking duplicate Business Key\n",
-					"duplicate_df=claim_df.groupBy(\"policy_number\").count().filter(F.col(\"count\")>1)\n",
-					"duplicate_count = duplicate_df.count()\n",
-					"print(f\" Duplicate Policy Numbers are : {duplicate_count}\")\n",
-					"\n",
-					"#Business Rule Validation: Claim amount should not be negative\n",
-					"invalid_claim_amount = claim_df.filter(F.col(\"age\").cast(\"double\") <0).count()\n",
-					"print(f\"Invalid claim records are : {invalid_claim_amount}\")\n",
-					"\n",
-					"if (null_count >0 or duplicate_count > 0 or invalid_claim_amount >0):\n",
-					"    raise Exception(f\"\"\"\n",
-					"                    Data Quality Validation Failed\n",
-					"                    \n",
-					"                    Null Policy Numbers : {null_count}\n",
-					"                    Duplicate Policy Number: {duplicate_count}\n",
-					"                    Invalid claim records: {invalid_claim_amount}\n",
-					"                    \"\"\")\n",
-					"print(\"Data Quality Validation Passed\")"
-				],
-				"execution_count": 32
-			},
-			{
-				"cell_type": "markdown",
-				"metadata": {
-					"nteract": {
-						"transient": {
-							"deleting": false
-						}
-					}
-				},
-				"source": [
-					"### 6.Read the Dimension Tables"
-				]
-			},
-			{
-				"cell_type": "code",
-				"source": [
-					"policy_dim = (\n",
-					"    spark.read.format(\"delta\")\n",
-					"    .load(policy_silver_path)\n",
-					"    .filter(F.col(\"is_current\") == \"Y\")\n",
-					"    .select(\"policy_number\", \"policy_sk\")\n",
-					")\n",
-					"\n",
-					"customer_dim = (\n",
-					"    spark.read.format(\"delta\")\n",
-					"    .load(customer_silver_path)\n",
-					"    .filter(F.col(\"is_current\") == \"Y\")\n",
-					"    .select(\"policy_number\", \"customer_sk\")\n",
-					")\n",
-					"\n",
-					"vehicle_dim = (\n",
-					"    spark.read.format(\"delta\")\n",
-					"    .load(vehicle_silver_path)\n",
-					"    .filter(F.col(\"is_current\") == \"Y\")\n",
-					"    .select(\"policy_number\", \"vehicle_sk\")\n",
-					")"
-				],
-				"execution_count": 34
-			},
-			{
-				"cell_type": "markdown",
-				"metadata": {
-					"nteract": {
-						"transient": {
-							"deleting": false
-						}
-					}
-				},
-				"source": [
-					"### 7. Lookup Surrogate key"
-				]
-			},
-			{
-				"cell_type": "code",
-				"source": [
-					"fact_claim_df = (\n",
-					"    claim_df.alias(\"c\")\n",
-					"\n",
-					"    .join(\n",
-					"        policy_dim.alias(\"p\"),\n",
-					"        on=\"policy_number\",\n",
-					"        how=\"left\"\n",
-					"    )\n",
-					"\n",
-					"    .join(\n",
-					"        customer_dim.alias(\"cu\"),\n",
-					"        on=\"policy_number\",\n",
-					"        how=\"left\"\n",
-					"    )\n",
-					"\n",
-					"    .join(\n",
-					"        vehicle_dim.alias(\"v\"),\n",
-					"        on=\"policy_number\",\n",
-					"        how=\"left\"\n",
-					"    )\n",
-					")"
-				],
-				"execution_count": 36
-			},
-			{
-				"cell_type": "markdown",
-				"metadata": {
-					"nteract": {
-						"transient": {
-							"deleting": false
-						}
-					}
-				},
-				"source": [
-					"### 8. Claim Fact table"
-				]
-			},
-			{
-				"cell_type": "code",
-				"source": [
-					"final_fact_claim_df = (\n",
-					"    fact_claim_df.select(\n",
+					"        # Keys\n",
 					"        \"policy_sk\",\n",
 					"        \"customer_sk\",\n",
 					"        \"vehicle_sk\",\n",
-					"        \"policy_number\",\n",
+					"        \"p.policy_number\",\n",
+					"\n",
+					"        # Policy\n",
+					"        \"policy_bind_date\",\n",
+					"        \"policy_state\",\n",
+					"        \"policy_csl\",\n",
+					"        \"policy_deductable\",\n",
+					"        \"policy_annual_premium\",\n",
+					"        \"umbrella_limit\",\n",
+					"\n",
+					"        # Customer\n",
+					"        \"months_as_customer\",\n",
+					"        \"age\",\n",
+					"        \"insured_zip\",\n",
+					"        \"insured_sex\",\n",
+					"        \"insured_education_level\",\n",
+					"        \"insured_occupation\",\n",
+					"        \"insured_hobbies\",\n",
+					"        \"insured_relationship\",\n",
+					"\n",
+					"        # Vehicle\n",
+					"        \"auto_make\",\n",
+					"        \"auto_model\",\n",
+					"        \"auto_year\",\n",
+					"\n",
+					"        # Claim\n",
 					"        \"incident_date\",\n",
 					"        \"incident_type\",\n",
 					"        \"collision_type\",\n",
@@ -334,7 +281,7 @@
 					"    )\n",
 					")"
 				],
-				"execution_count": 38
+				"execution_count": 52
 			},
 			{
 				"cell_type": "markdown",
@@ -346,15 +293,15 @@
 					}
 				},
 				"source": [
-					"### 9. Verify claim fact table"
+					"### 8. Validate gold claim sumery data "
 				]
 			},
 			{
 				"cell_type": "code",
 				"source": [
-					"print(final_fact_claim_df.count())\n",
+					"print(gold_claim_summary_df.count())\n",
 					"\n",
-					"final_fact_claim_df.show(5, truncate=False)"
+					"gold_claim_summary_df.show(5, truncate=False)"
 				],
 				"execution_count": null
 			},
@@ -368,20 +315,20 @@
 					}
 				},
 				"source": [
-					"### 10. Write claim fact table to silver layer"
+					"### 9.Write to gold layer"
 				]
 			},
 			{
 				"cell_type": "code",
 				"source": [
-					"final_fact_claim_df.write \\\n",
+					"gold_claim_summary_df.write \\\n",
 					"    .format(\"delta\") \\\n",
 					"    .mode(\"overwrite\") \\\n",
-					"    .save(claim_silver_path)\n",
+					"    .save(gold_claim_summary_path)\n",
 					"\n",
-					"print(\"Fact Claim Loaded Successfully\")"
+					"print(\"Gold Claim Summary Loaded Successfully\")"
 				],
-				"execution_count": 42
+				"execution_count": 55
 			}
 		]
 	}
