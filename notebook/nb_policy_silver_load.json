@@ -17,7 +17,7 @@
 				"spark.dynamicAllocation.enabled": "true",
 				"spark.dynamicAllocation.minExecutors": "1",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "86c266c9-c181-4ee1-b093-075b87256aa7"
+				"spark.autotune.trackingId": "0dd75336-4f7f-4284-9021-84f8a15c9cbd"
 			}
 		},
 		"metadata": {
@@ -162,33 +162,6 @@
 					"policy_df.show(5,truncate=False)"
 				],
 				"execution_count": 19
-			},
-			{
-				"cell_type": "code",
-				"metadata": {
-					"collapsed": false
-				},
-				"source": [
-					"display(bronze_df.filter(F.col(\"policy_number\")==\"842643\"))\n",
-					"\n",
-					"display(policy_df.filter(F.col(\"policy_number\")==\"842643\"))\n",
-					"display(target_df.filter(F.col(\"policy_number\")==\"842643\"))"
-				],
-				"execution_count": null
-			},
-			{
-				"cell_type": "code",
-				"source": [
-					"policy_df.select(\"policy_bind_date\").show(5, truncate=False)"
-				],
-				"execution_count": 22
-			},
-			{
-				"cell_type": "code",
-				"source": [
-					"target_df.select(\"policy_bind_date\").show(5, truncate=False)"
-				],
-				"execution_count": null
 			},
 			{
 				"cell_type": "markdown",
@@ -355,34 +328,6 @@
 				"execution_count": 26
 			},
 			{
-				"cell_type": "code",
-				"metadata": {
-					"collapsed": false
-				},
-				"source": [
-					"display(comparision_df.groupBy(\"merge_action\").count())"
-				],
-				"execution_count": null
-			},
-			{
-				"cell_type": "code",
-				"metadata": {
-					"collapsed": false
-				},
-				"source": [
-					"display(comparision_df.filter(F.col(\"policy_number\") == \"842643\") \\\n",
-					".select(\n",
-					"    \"src.policy_bind_date\",\"tgt.policy_bind_date\",\n",
-					"    \"src.policy_state\",\"tgt.policy_state\",\n",
-					"    \"src.policy_csl\",\"tgt.policy_csl\",\n",
-					"    \"src.policy_deductable\",\"tgt.policy_deductable\",\n",
-					"    \"src.policy_annual_premium\",\"tgt.policy_annual_premium\",\n",
-					"    \"src.umbrella_limit\",\"tgt.umbrella_limit\"\n",
-					"))"
-				],
-				"execution_count": null
-			},
-			{
 				"cell_type": "markdown",
 				"metadata": {
 					"nteract": {
@@ -392,7 +337,7 @@
 					}
 				},
 				"source": [
-					"## Preparing Updated Records"
+					"## 9. Preparing Updated Records"
 				]
 			},
 			{
@@ -416,7 +361,7 @@
 					}
 				},
 				"source": [
-					"## Getting list of Existing Old records which are expired."
+					"## 10. Getting list of Existing Old records which are expired."
 				]
 			},
 			{
@@ -440,7 +385,7 @@
 					}
 				},
 				"source": [
-					"## Preparing the Target Df to updae the affected expired records"
+					"## 11. Preparing the Target Df to updae the affected expired records"
 				]
 			},
 			{
@@ -469,20 +414,6 @@
 				"execution_count": 37
 			},
 			{
-				"cell_type": "code",
-				"metadata": {
-					"collapsed": false
-				},
-				"source": [
-					"display(expired_df.filter(F.col(\"policy_number\").isin(update_old_policy_list))\n",
-					".select(\"policy_number\",\n",
-					"\"effective_start_date\",\n",
-					"\"effective_end_date\",\n",
-					"\"is_current\"))"
-				],
-				"execution_count": 39
-			},
-			{
 				"cell_type": "markdown",
 				"metadata": {
 					"nteract": {
@@ -492,7 +423,7 @@
 					}
 				},
 				"source": [
-					"## Preparing insert record"
+					"## 12. Preparing insert record"
 				]
 			},
 			{
@@ -522,7 +453,7 @@
 					}
 				},
 				"source": [
-					"## 9. Prepare New INSERT/UPDATE Records"
+					"## 13. Prepare New INSERT/UPDATE Records"
 				]
 			},
 			{
@@ -581,6 +512,19 @@
 				"execution_count": 48
 			},
 			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 14. Validating compelete silver data with new change."
+				]
+			},
+			{
 				"cell_type": "code",
 				"source": [
 					"final_silver_df = expired_df.unionByName(new_records_df)\n",
@@ -612,7 +556,7 @@
 					}
 				},
 				"source": [
-					"## Validation Current Vs Historical "
+					"## 15. Validation Current Vs Historical "
 				]
 			},
 			{
@@ -632,7 +576,7 @@
 					}
 				},
 				"source": [
-					"## Write change data to silver delta"
+					"## 16. Write change data to silver delta"
 				]
 			},
 			{
