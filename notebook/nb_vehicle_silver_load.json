@@ -1,5 +1,5 @@
 {
-	"name": "nb_customer_silver_load",
+	"name": "nb_vehicle_silver_load",
 	"properties": {
 		"nbformat": 4,
 		"nbformat_minor": 2,
@@ -17,7 +17,7 @@
 				"spark.dynamicAllocation.enabled": "true",
 				"spark.dynamicAllocation.minExecutors": "1",
 				"spark.dynamicAllocation.maxExecutors": "2",
-				"spark.autotune.trackingId": "b4d58a3e-27a8-4f0a-af28-011ba77d4a0f"
+				"spark.autotune.trackingId": "f563e537-978b-4ca9-8fe9-f488c6df79dd"
 			}
 		},
 		"metadata": {
@@ -68,7 +68,7 @@
 					"from pyspark.sql.window import Window\n",
 					"from delta.tables import DeltaTable"
 				],
-				"execution_count": 8
+				"execution_count": 10
 			},
 			{
 				"cell_type": "markdown",
@@ -90,9 +90,9 @@
 					"container_name=\"insurancedataplatform\"\n",
 					"\n",
 					"bronze_path=(f\"abfss://{container_name}@{storage_account}.dfs.core.windows.net/bronze/\")\n",
-					"silver_path=(f\"abfss://{container_name}@{storage_account}.dfs.core.windows.net/silver/customer/\")"
+					"silver_path=(f\"abfss://{container_name}@{storage_account}.dfs.core.windows.net/silver/vehicle/\")"
 				],
-				"execution_count": 9
+				"execution_count": 11
 			},
 			{
 				"cell_type": "markdown",
@@ -114,7 +114,7 @@
 					"print(f\"Bronze record count is : {bronze_df.count()}\")\n",
 					"bronze_df.printSchema()"
 				],
-				"execution_count": 10
+				"execution_count": null
 			},
 			{
 				"cell_type": "markdown",
@@ -132,43 +132,29 @@
 			{
 				"cell_type": "code",
 				"source": [
-					"customer_df = (bronze_df.select(\n",
+					"vehicle_df = (bronze_df.select(\n",
 					"    \"policy_number\",\n",
-					"    \"months_as_customer\",\n",
-					"    \"age\",\n",
-					"    \"insured_zip\",\n",
-					"    \"insured_sex\",\n",
-					"    \"insured_education_level\",\n",
-					"    \"insured_occupation\",\n",
-					"    \"insured_hobbies\",\n",
-					"    \"insured_relationship\",\n",
-					"    \"capital-gains\",\n",
-					"    \"capital-loss\"\n",
+					"    \"auto_make\",\n",
+					"    \"auto_model\",\n",
+					"    \"auto_year\"\n",
 					").withColumn(\n",
 					"    \"change_hash\",\n",
 					"    F.sha2(\n",
 					"        F.concat_ws(\n",
 					"            \"||\",\n",
-					"            F.col(\"months_as_customer\"),\n",
-					"            F.col(\"age\"),\n",
-					"            F.col(\"insured_zip\"),\n",
-					"            F.col(\"insured_sex\"),\n",
-					"            F.col(\"insured_education_level\"),\n",
-					"            F.col(\"insured_occupation\"),\n",
-					"            F.col(\"insured_hobbies\"),\n",
-					"            F.col(\"insured_relationship\"),\n",
-					"            F.col(\"capital-gains\"),\n",
-					"            F.col(\"capital-loss\")\n",
+					"            F.col(\"auto_make\"),\n",
+					"            F.col(\"auto_model\"),\n",
+					"            F.col(\"auto_year\")\n",
 					"        ),\n",
 					"        256\n",
 					"    )\n",
 					")\n",
 					")\n",
 					"\n",
-					"print(f\"Customer record count : {customer_df.count()}\")\n",
-					"customer_df.show(5,truncate=False)"
+					"print(f\"Vehicle record count : {vehicle_df.count()}\")\n",
+					"vehicle_df.show(5,truncate=False)"
 				],
-				"execution_count": 11
+				"execution_count": 13
 			},
 			{
 				"cell_type": "markdown",
@@ -186,34 +172,34 @@
 			{
 				"cell_type": "code",
 				"source": [
-					"record_count= customer_df.count()\n",
-					"print(f\"Record count of customer is : {record_count}\")\n",
+					"record_count= vehicle_df.count()\n",
+					"print(f\"Record count of vehicle is : {record_count}\")\n",
 					"\n",
 					"#Checking Business key has any null entries\n",
-					"null_count= customer_df.filter(F.col(\"policy_number\").isNull()).count()\n",
+					"null_count= vehicle_df.filter(F.col(\"policy_number\").isNull()).count()\n",
 					"print(f\"Null policy number count : {null_count}\")\n",
 					"\n",
 					"#Checking duplicate Business Key\n",
-					"duplicate_df=customer_df.groupBy(\"policy_number\").count().filter(F.col(\"count\")>1)\n",
+					"duplicate_df=vehicle_df.groupBy(\"policy_number\").count().filter(F.col(\"count\")>1)\n",
 					"duplicate_count = duplicate_df.count()\n",
 					"print(f\" Duplicate Policy Numbers are : {duplicate_count}\")\n",
 					"\n",
 					"#Business Rule Validation: Premium should not be negative\n",
-					"invalid_age = customer_df.filter(F.col(\"age\").cast(\"int\") <=0).count()\n",
-					"print(f\"Invalid age records are : {invalid_age}\")\n",
+					"invalid_auto_year = vehicle_df.filter(F.col(\"auto_year\").cast(\"int\") <=0).count()\n",
+					"print(f\"Invalid auto year records are : {invalid_auto_year}\")\n",
 					"\n",
-					"if (null_count >0 or duplicate_count > 0 or invalid_age >0):\n",
+					"if (null_count >0 or duplicate_count > 0 or invalid_auto_year >0):\n",
 					"    raise Exception(f\"\"\"\n",
 					"                    Data Quality Validation Failed\n",
 					"                    \n",
 					"                    Null Policy Numbers : {null_count}\n",
 					"                    Duplicate Policy Number: {duplicate_count}\n",
-					"                    Invalid age records: {invalid_age}\n",
+					"                    Invalid auto year records: {invalid_auto_year}\n",
 					"                    \"\"\")\n",
 					"print(\"Data Quality Validation Passed\")\n",
 					""
 				],
-				"execution_count": 12
+				"execution_count": 14
 			},
 			{
 				"cell_type": "markdown",
@@ -232,9 +218,9 @@
 				"cell_type": "code",
 				"source": [
 					"is_delta_table = DeltaTable.isDeltaTable(spark,silver_path)\n",
-					"print(f\"Silver customer exist : {is_delta_table}\")"
+					"print(f\"Silver vehicle data exist : {is_delta_table}\")"
 				],
-				"execution_count": 13
+				"execution_count": 15
 			},
 			{
 				"cell_type": "markdown",
@@ -257,7 +243,7 @@
 					"    print(\"Initial Load Starting...\")\n",
 					"    \n",
 					"    initial_load_df=(\n",
-					"            customer_df.withColumn(\"customer_sk\",\n",
+					"            vehicle_df.withColumn(\"vehicle_sk\",\n",
 					"            F.row_number().over(Window.orderBy(\"policy_number\")))\\\n",
 					"            .withColumn(\"effective_start_date\",F.current_date())\\\n",
 					"            .withColumn(\"effective_end_date\",F.lit(\"9999-12-31\"))\\\n",
@@ -267,7 +253,7 @@
 					"\n",
 					"    print(\"Intial load completed...\")"
 				],
-				"execution_count": 14
+				"execution_count": 16
 			},
 			{
 				"cell_type": "markdown",
@@ -288,17 +274,17 @@
 					"target_df = spark.read.format(\"delta\").load(silver_path)\n",
 					"\n",
 					"# Get the last number of the Surrogate key which is \"policy_sk\"\n",
-					"max_sk_df = target_df.agg(F.max(\"customer_sk\").alias(\"max_sk\"))\n",
+					"max_sk_df = target_df.agg(F.max(\"vehicle_sk\").alias(\"max_sk\"))\n",
 					"\n",
 					"max_sk= max_sk_df.collect()[0][\"max_sk\"]\n",
 					"\n",
 					"if max_sk is None:\n",
 					"    max_sk = 0\n",
 					"\n",
-					"print(f\"Current max customer sk is : {max_sk}\")\n",
+					"print(f\"Current max vehicle sk is : {max_sk}\")\n",
 					"\n",
 					"comparision_df =(\n",
-					"                customer_df.alias(\"src\")\n",
+					"                vehicle_df.alias(\"src\")\n",
 					"                .join(\n",
 					"                    target_df.filter(F.col(\"is_current\")==\"Y\").alias(\"tgt\"),\n",
 					"                    on=\"policy_number\",\n",
@@ -319,7 +305,7 @@
 					"                )\n",
 					")"
 				],
-				"execution_count": 15
+				"execution_count": 18
 			},
 			{
 				"cell_type": "markdown",
@@ -343,7 +329,7 @@
 					"\n",
 					"updated_df.select(\"policy_number\",\"merge_action\").show(truncate=False)"
 				],
-				"execution_count": 16
+				"execution_count": 19
 			},
 			{
 				"cell_type": "markdown",
@@ -367,7 +353,7 @@
 					"    update_old_policy_list.append(row[\"policy_number\"])\n",
 					"print(update_old_policy_list)"
 				],
-				"execution_count": 17
+				"execution_count": 20
 			},
 			{
 				"cell_type": "markdown",
@@ -405,7 +391,7 @@
 					"    )\n",
 					")"
 				],
-				"execution_count": 18
+				"execution_count": 26
 			},
 			{
 				"cell_type": "markdown",
@@ -434,7 +420,7 @@
 					"\n",
 					"insert_df.select(\"policy_number\",\"merge_action\").show(truncate=False)"
 				],
-				"execution_count": 19
+				"execution_count": 21
 			},
 			{
 				"cell_type": "markdown",
@@ -453,13 +439,13 @@
 				"cell_type": "code",
 				"source": [
 					"new_records_df =(\n",
-					"    insert_df.withColumn(\"customer_sk\",F.row_number().over(Window.orderBy(\"policy_number\"))+max_sk)\n",
+					"    insert_df.withColumn(\"vehicle_sk\",F.row_number().over(Window.orderBy(\"policy_number\"))+max_sk)\n",
 					"    .withColumn(\"effective_start_date\",F.current_date())\n",
 					"    .withColumn(\"effective_end_date\",F.lit(\"9999-12-31\"))\n",
 					"    .withColumn(\"is_current\",F.lit(\"Y\"))\n",
 					"    )\n",
 					"new_records_df.select(\n",
-					"    \"customer_sk\",\n",
+					"    \"vehicle_sk\",\n",
 					"    \"policy_number\",\n",
 					"    \"merge_action\",\n",
 					"    \"effective_start_date\",\n",
@@ -467,7 +453,7 @@
 					"    \"is_current\"\n",
 					").show(5,truncate=False)"
 				],
-				"execution_count": 20
+				"execution_count": 22
 			},
 			{
 				"cell_type": "markdown",
@@ -487,18 +473,11 @@
 				"source": [
 					"new_records_df = (\n",
 					"    new_records_df.select(\n",
-					"        \"customer_sk\",\n",
+					"        \"vehicle_sk\",\n",
 					"        \"policy_number\",\n",
-					"        F.col(\"src.months_as_customer\").alias(\"months_as_customer\"),\n",
-					"        F.col(\"src.age\").alias(\"age\"),\n",
-					"        F.col(\"src.insured_zip\").alias(\"insured_zip\"),\n",
-					"        F.col(\"src.insured_sex\").alias(\"insured_sex\"),\n",
-					"        F.col(\"src.insured_education_level\").alias(\"insured_education_level\"),\n",
-					"        F.col(\"src.insured_occupation\").alias(\"insured_occupation\"),\n",
-					"        F.col(\"src.insured_hobbies\").alias(\"insured_hobbies\"),\n",
-					"        F.col(\"src.insured_relationship\").alias(\"insured_relationship\"),\n",
-					"        F.col(\"src.capital-gains\").alias(\"capital-gains\"),\n",
-					"        F.col(\"src.capital-loss\").alias(\"capital-loss\"),\n",
+					"        F.col(\"src.auto_make\").alias(\"auto_make\"),\n",
+					"        F.col(\"src.auto_model\").alias(\"auto_model\"),\n",
+					"        F.col(\"src.auto_year\").alias(\"auto_year\"),\n",
 					"        F.col(\"src.change_hash\").alias(\"change_hash\"),\n",
 					"        \"effective_start_date\",\n",
 					"        \"effective_end_date\",\n",
@@ -506,7 +485,7 @@
 					"    )\n",
 					")"
 				],
-				"execution_count": 21
+				"execution_count": 24
 			},
 			{
 				"cell_type": "markdown",
@@ -528,7 +507,7 @@
 					"\n",
 					"print(f\"Final Silver Record Count : {final_silver_df.count()}\")"
 				],
-				"execution_count": 22
+				"execution_count": 27
 			},
 			{
 				"cell_type": "markdown",
@@ -548,7 +527,7 @@
 				"source": [
 					"final_silver_df.groupBy(\"is_current\").count().show()"
 				],
-				"execution_count": 23
+				"execution_count": 28
 			},
 			{
 				"cell_type": "markdown",
@@ -569,14 +548,14 @@
 					"final_silver_df.write.format(\"delta\").mode(\"overwrite\").save(silver_path)\n",
 					"print(\"SCD2 Load Completed Successfully\")"
 				],
-				"execution_count": 24
+				"execution_count": 29
 			},
 			{
 				"cell_type": "code",
 				"source": [
 					"display(spark.read.format(\"delta\").load(silver_path).count())"
 				],
-				"execution_count": 25
+				"execution_count": 30
 			}
 		]
 	}
