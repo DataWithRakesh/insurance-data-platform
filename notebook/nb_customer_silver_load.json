@@ -1,0 +1,583 @@
+{
+	"name": "nb_customer_silver_load",
+	"properties": {
+		"nbformat": 4,
+		"nbformat_minor": 2,
+		"bigDataPool": {
+			"referenceName": "sparkpool",
+			"type": "BigDataPoolReference"
+		},
+		"sessionProperties": {
+			"driverMemory": "28g",
+			"driverCores": 4,
+			"executorMemory": "28g",
+			"executorCores": 4,
+			"numExecutors": 1,
+			"conf": {
+				"spark.dynamicAllocation.enabled": "true",
+				"spark.dynamicAllocation.minExecutors": "1",
+				"spark.dynamicAllocation.maxExecutors": "2",
+				"spark.autotune.trackingId": "00f83a52-ba50-424b-a2a3-3b8853576026"
+			}
+		},
+		"metadata": {
+			"saveOutput": true,
+			"enableDebugMode": false,
+			"kernelspec": {
+				"name": "synapse_pyspark",
+				"display_name": "Synapse PySpark"
+			},
+			"language_info": {
+				"name": "python"
+			},
+			"a365ComputeOptions": {
+				"id": "/subscriptions/c2cd82ac-1b67-4f57-ae79-64d3e1739263/resourceGroups/rg-synapse-workspace/providers/Microsoft.Synapse/workspaces/insurance-data-platform/bigDataPools/sparkpool",
+				"name": "sparkpool",
+				"type": "Spark",
+				"endpoint": "https://insurance-data-platform.dev.azuresynapse.net/livyApi/versions/2019-11-01-preview/sparkPools/sparkpool",
+				"auth": {
+					"type": "AAD",
+					"authResource": "https://dev.azuresynapse.net"
+				},
+				"sparkVersion": "3.5",
+				"nodeCount": 10,
+				"cores": 4,
+				"memory": 28,
+				"automaticScaleJobs": true
+			},
+			"sessionKeepAliveTimeout": 30
+		},
+		"cells": [
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### 1.Imports"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"from pyspark.sql import functions as F\n",
+					"from pyspark.sql.window import Window\n",
+					"from delta.tables import DeltaTable"
+				],
+				"execution_count": 8
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"### 2. Configuration"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"storage_account=\"rakeshsynapseadlsgen2\"\n",
+					"container_name=\"insurancedataplatform\"\n",
+					"\n",
+					"bronze_path=(f\"abfss://{container_name}@{storage_account}.dfs.core.windows.net/bronze/\")\n",
+					"silver_path=(f\"abfss://{container_name}@{storage_account}.dfs.core.windows.net/silver/customer/\")"
+				],
+				"execution_count": 9
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 3. Read Bronze Layer"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"bronze_df=spark.read.format(\"parquet\").load(bronze_path)\n",
+					"print(f\"Bronze record count is : {bronze_df.count()}\")\n",
+					"bronze_df.printSchema()"
+				],
+				"execution_count": 10
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 4. Prepare Customer Staging DataFrame"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"customer_df = (bronze_df.select(\n",
+					"    \"policy_number\",\n",
+					"    \"months_as_customer\",\n",
+					"    \"age\",\n",
+					"    \"insured_zip\",\n",
+					"    \"insured_sex\",\n",
+					"    \"insured_education_level\",\n",
+					"    \"insured_occupation\",\n",
+					"    \"insured_hobbies\",\n",
+					"    \"insured_relationship\",\n",
+					"    \"capital-gains\",\n",
+					"    \"capital-loss\"\n",
+					").withColumn(\n",
+					"    \"change_hash\",\n",
+					"    F.sha2(\n",
+					"        F.concat_ws(\n",
+					"            \"||\",\n",
+					"            F.col(\"months_as_customer\"),\n",
+					"            F.col(\"age\"),\n",
+					"            F.col(\"insured_zip\"),\n",
+					"            F.col(\"insured_sex\"),\n",
+					"            F.col(\"insured_education_level\"),\n",
+					"            F.col(\"insured_occupation\"),\n",
+					"            F.col(\"insured_hobbies\"),\n",
+					"            F.col(\"insured_relationship\"),\n",
+					"            F.col(\"capital-gains\"),\n",
+					"            F.col(\"capital-loss\")\n",
+					"        ),\n",
+					"        256\n",
+					"    )\n",
+					")\n",
+					")\n",
+					"\n",
+					"print(f\"Customer record count : {customer_df.count()}\")\n",
+					"customer_df.show(5,truncate=False)"
+				],
+				"execution_count": 11
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 5. Data Quality Validation"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"record_count= customer_df.count()\n",
+					"print(f\"Record count of customer is : {record_count}\")\n",
+					"\n",
+					"#Checking Business key has any null entries\n",
+					"null_count= customer_df.filter(F.col(\"policy_number\").isNull()).count()\n",
+					"print(f\"Null policy number count : {null_count}\")\n",
+					"\n",
+					"#Checking duplicate Business Key\n",
+					"duplicate_df=customer_df.groupBy(\"policy_number\").count().filter(F.col(\"count\")>1)\n",
+					"duplicate_count = duplicate_df.count()\n",
+					"print(f\" Duplicate Policy Numbers are : {duplicate_count}\")\n",
+					"\n",
+					"#Business Rule Validation: Premium should not be negative\n",
+					"invalid_age = customer_df.filter(F.col(\"age\").cast(\"int\") <=0).count()\n",
+					"print(f\"Invalid age records are : {invalid_age}\")\n",
+					"\n",
+					"if (null_count >0 or duplicate_count > 0 or invalid_age >0):\n",
+					"    raise Exception(f\"\"\"\n",
+					"                    Data Quality Validation Failed\n",
+					"                    \n",
+					"                    Null Policy Numbers : {null_count}\n",
+					"                    Duplicate Policy Number: {duplicate_count}\n",
+					"                    Invalid age records: {invalid_age}\n",
+					"                    \"\"\")\n",
+					"print(\"Data Quality Validation Passed\")\n",
+					""
+				],
+				"execution_count": 12
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 6. Check Target Delta Table"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"is_delta_table = DeltaTable.isDeltaTable(spark,silver_path)\n",
+					"print(f\"Silver policy exist : {is_delta_table}\")"
+				],
+				"execution_count": 13
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 7. Initial Load"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"if not is_delta_table:\n",
+					"\n",
+					"    print(\"Initial Load Starting...\")\n",
+					"    \n",
+					"    initial_load_df=(\n",
+					"            customer_df.withColumn(\"customer_sk\",\n",
+					"            F.row_number().over(Window.orderBy(\"policy_number\")))\\\n",
+					"            .withColumn(\"effective_start_date\",F.current_date())\\\n",
+					"            .withColumn(\"effective_end_date\",F.lit(\"9999-12-31\"))\\\n",
+					"            .withColumn(\"is_current\",F.lit(\"Y\")))\n",
+					"\n",
+					"    initial_load_df.write.format(\"delta\").mode(\"overwrite\").save(silver_path)\n",
+					"\n",
+					"    print(\"Intial load completed...\")"
+				],
+				"execution_count": 14
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 8. Incremental SCD2 Merge"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"target_df = spark.read.format(\"delta\").load(silver_path)\n",
+					"\n",
+					"# Get the last number of the Surrogate key which is \"policy_sk\"\n",
+					"max_sk_df = target_df.agg(F.max(\"customer_sk\").alias(\"max_sk\"))\n",
+					"\n",
+					"max_sk= max_sk_df.collect()[0][\"max_sk\"]\n",
+					"\n",
+					"if max_sk is None:\n",
+					"    max_sk = 0\n",
+					"\n",
+					"print(f\"Current max customer sk is : {max_sk}\")\n",
+					"\n",
+					"comparision_df =(\n",
+					"                customer_df.alias(\"src\")\n",
+					"                .join(\n",
+					"                    target_df.filter(F.col(\"is_current\")==\"Y\").alias(\"tgt\"),\n",
+					"                    on=\"policy_number\",\n",
+					"                    how=\"left\"\n",
+					"                )\n",
+					")\n",
+					"\n",
+					"comparision_df=(\n",
+					"                comparision_df.withColumn(\n",
+					"                    \"merge_action\",F.when(\n",
+					"                            F.col(\"tgt.policy_number\").isNull(),\n",
+					"                            \"INSERT\"\n",
+					"                    ).when(\n",
+					"                        F.col(\"src.change_hash\")!=F.col(\"tgt.change_hash\"),\n",
+					"                        \"UPDATE\"\n",
+					"                    ).otherwise(\"NO_CHANGE\")\n",
+					"                    \n",
+					"                )\n",
+					")"
+				],
+				"execution_count": 15
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 9. Preparing Updated Records"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"updated_df = (comparision_df.filter(F.col(\"merge_action\")==\"UPDATE\"))\n",
+					"\n",
+					"print(f\"Updated record counts are : {updated_df.count()}\")\n",
+					"\n",
+					"updated_df.select(\"policy_number\",\"merge_action\").show(truncate=False)"
+				],
+				"execution_count": 16
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 10. Getting list of Existing Old records which are expired."
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"update_old_policy_list= []\n",
+					"\n",
+					"for row in updated_df.select(\"policy_number\").collect():\n",
+					"    update_old_policy_list.append(row[\"policy_number\"])\n",
+					"print(update_old_policy_list)"
+				],
+				"execution_count": 17
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 11. Preparing the Target Df to update the affected expired records"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"expired_df = (\n",
+					"    target_df\n",
+					"    .withColumn(\n",
+					"        \"effective_end_date\",\n",
+					"        F.when(\n",
+					"            (F.col(\"policy_number\").isin(update_old_policy_list)) &\n",
+					"            (F.col(\"is_current\") == \"Y\"),\n",
+					"            F.current_date()\n",
+					"        ).otherwise(F.col(\"effective_end_date\"))\n",
+					"    )\n",
+					"    .withColumn(\n",
+					"        \"is_current\",\n",
+					"        F.when(\n",
+					"            (F.col(\"policy_number\").isin(update_old_policy_list)) &\n",
+					"            (F.col(\"is_current\") == \"Y\"),\n",
+					"            \"N\"\n",
+					"        ).otherwise(F.col(\"is_current\"))\n",
+					"    )\n",
+					")"
+				],
+				"execution_count": 18
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 12. Preparing insert record"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"insert_df = (\n",
+					"    comparision_df\n",
+					"    .filter(\n",
+					"        F.col(\"merge_action\").isin(\"INSERT\", \"UPDATE\")\n",
+					"    )\n",
+					")\n",
+					"\n",
+					"print(f\"New insert record counts are : {insert_df.count()}\")\n",
+					"\n",
+					"insert_df.select(\"policy_number\",\"merge_action\").show(truncate=False)"
+				],
+				"execution_count": 19
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 13. Prepare New INSERT/UPDATE Records"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"new_records_df =(\n",
+					"    insert_df.withColumn(\"customer_sk\",F.row_number().over(Window.orderBy(\"policy_number\"))+max_sk)\n",
+					"    .withColumn(\"effective_start_date\",F.current_date())\n",
+					"    .withColumn(\"effective_end_date\",F.lit(\"9999-12-31\"))\n",
+					"    .withColumn(\"is_current\",F.lit(\"Y\"))\n",
+					"    )\n",
+					"new_records_df.select(\n",
+					"    \"customer_sk\",\n",
+					"    \"policy_number\",\n",
+					"    \"merge_action\",\n",
+					"    \"effective_start_date\",\n",
+					"    \"effective_end_date\",\n",
+					"    \"is_current\"\n",
+					").show(5,truncate=False)"
+				],
+				"execution_count": 20
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"1. - #Now the problem here is new_records_df contains extra schema(We can check buy print new_records_df print schema and expired_df print schema. Since the expired df is created from silver existing data). We have to now prepare our new data in a way where the schema should match with silver schema."
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"new_records_df = (\n",
+					"    new_records_df.select(\n",
+					"        \"customer_sk\",\n",
+					"        \"policy_number\",\n",
+					"        F.col(\"src.months_as_customer\").alias(\"months_as_customer\"),\n",
+					"        F.col(\"src.age\").alias(\"age\"),\n",
+					"        F.col(\"src.insured_zip\").alias(\"insured_zip\"),\n",
+					"        F.col(\"src.insured_sex\").alias(\"insured_sex\"),\n",
+					"        F.col(\"src.insured_education_level\").alias(\"insured_education_level\"),\n",
+					"        F.col(\"src.insured_occupation\").alias(\"insured_occupation\"),\n",
+					"        F.col(\"src.insured_hobbies\").alias(\"insured_hobbies\"),\n",
+					"        F.col(\"src.insured_relationship\").alias(\"insured_relationship\"),\n",
+					"        F.col(\"src.capital-gains\").alias(\"capital-gains\"),\n",
+					"        F.col(\"src.capital-loss\").alias(\"capital-loss\"),\n",
+					"        F.col(\"src.change_hash\").alias(\"change_hash\"),\n",
+					"        \"effective_start_date\",\n",
+					"        \"effective_end_date\",\n",
+					"        \"is_current\"\n",
+					"    )\n",
+					")"
+				],
+				"execution_count": 21
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 14. Validating compelete silver data with new change."
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"final_silver_df = expired_df.unionByName(new_records_df)\n",
+					"\n",
+					"print(f\"Final Silver Record Count : {final_silver_df.count()}\")"
+				],
+				"execution_count": 22
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 15. Validation Current Vs Historical "
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"final_silver_df.groupBy(\"is_current\").count().show()"
+				],
+				"execution_count": 23
+			},
+			{
+				"cell_type": "markdown",
+				"metadata": {
+					"nteract": {
+						"transient": {
+							"deleting": false
+						}
+					}
+				},
+				"source": [
+					"## 16. Write change data to silver delta"
+				]
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"final_silver_df.write.format(\"delta\").mode(\"overwrite\").save(silver_path)\n",
+					"print(\"SCD2 Load Completed Successfully\")"
+				],
+				"execution_count": 24
+			},
+			{
+				"cell_type": "code",
+				"source": [
+					"display(spark.read.format(\"delta\").load(silver_path).count())"
+				],
+				"execution_count": 25
+			}
+		]
+	}
+}
